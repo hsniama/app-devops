@@ -6,9 +6,9 @@ import os
 os.environ.setdefault("API_KEY", "2f5ae96c-b558-4c7b-a590-a501ae1c3f6c")
 os.environ.setdefault("SECRET_KEY", "test-secret")
 
-from fastapi.testclient import TestClient  # noqa: E402
-from app.main import app  # noqa: E402
-from app.utils.jwt_handler import create_jwt  # noqa: E402
+from fastapi.testclient import TestClient 
+from app.main import app
+from app.utils.jwt_handler import create_jwt  
 
 
 client = TestClient(app)
