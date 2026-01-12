@@ -40,7 +40,7 @@ RUN apk update && apk upgrade && rm -rf /var/cache/apk/*
 # - --retries: reintenta antes de marcar unhealthy
 # - --start-period: da tiempo extra al arranque inicial
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \
-    CMD curl -fsS http://127.0.0.1:8000/docs >/dev/null || exit 1
+    CMD curl -fsS http://127.0.0.1:8000/healthz >/dev/null || exit 1
 
 # === Paso 9: Exponer puerto usado por Gunicorn/Uvicorn ===
 EXPOSE 8000

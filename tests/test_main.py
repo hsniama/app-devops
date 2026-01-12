@@ -1,8 +1,10 @@
+# tests/test_main.py
+
 import os
 
-# --- Definir variables de entorno ANTES de importar app ---
+# Set env vars BEFORE importing the app
 os.environ.setdefault("API_KEY", "2f5ae96c-b558-4c7b-a590-a501ae1c3f6c")
-os.environ.setdefault("SECRET_KEY", "clave_super_secreta_de_tests")
+os.environ.setdefault("SECRET_KEY", "test-secret")
 
 from fastapi.testclient import TestClient  # noqa: E402
 from app.main import app  # noqa: E402
@@ -21,38 +23,34 @@ def _payload() -> dict:
     }
 
 
-def test_valid_post():
+def test_valid_post_and_token_is_one_time():
     api_key = os.environ["API_KEY"]
     secret_key = os.environ["SECRET_KEY"]
 
-    jwt_token = create_jwt(
-        {"user": "test"},
-        secret_key=secret_key,
-        expires_in=60,
-    )
+    jwt_token = create_jwt({"user": "test"}, secret_key=secret_key, expires_in=60)
 
-    response = client.post(
+    # First use: OK
+    r1 = client.post(
         "/DevOps",
-        headers={
-            "X-Parse-REST-API-Key": api_key,
-            "X-JWT-KWY": jwt_token,
-        },
+        headers={"X-Parse-REST-API-Key": api_key, "X-JWT-KWY": jwt_token},
         json=_payload(),
     )
+    assert r1.status_code == 200
+    assert r1.json()["message"] == "Hello Juan Perez your message will be send"
 
-    assert response.status_code == 200
-    assert response.json()["message"] == (
-        "Hello Juan Perez your message will be send"
+    # Second use (same JWT): must fail (unique per transaction)
+    r2 = client.post(
+        "/DevOps",
+        headers={"X-Parse-REST-API-Key": api_key, "X-JWT-KWY": jwt_token},
+        json=_payload(),
     )
+    assert r2.status_code == 403
+    assert r2.json()["detail"] == "Invalid or missing JWT"
 
 
 def test_missing_api_key():
     secret_key = os.environ["SECRET_KEY"]
-    jwt_token = create_jwt(
-        {"user": "test"},
-        secret_key=secret_key,
-        expires_in=604800,
-    )
+    jwt_token = create_jwt({"user": "test"}, secret_key=secret_key, expires_in=60)
 
     response = client.post(
         "/DevOps",
@@ -69,10 +67,7 @@ def test_invalid_jwt():
 
     response = client.post(
         "/DevOps",
-        headers={
-            "X-Parse-REST-API-Key": api_key,
-            "X-JWT-KWY": "invalid.token.value",
-        },
+        headers={"X-Parse-REST-API-Key": api_key, "X-JWT-KWY": "invalid.token.value"},
         json=_payload(),
     )
 
@@ -90,3 +85,9 @@ def test_generate_jwt():
     response = client.get("/generate-jwt")
     assert response.status_code == 200
     assert "jwt" in response.json()
+
+
+def test_healthz():
+    response = client.get("/healthz")
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"

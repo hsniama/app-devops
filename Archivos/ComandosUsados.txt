@@ -2,15 +2,17 @@
 Cada que se hace un cambio en el código:
 
 git add . && git commit -m "Configuración manifest"
-git push
+git push 
 
-Y poner clave de azure repos
 
 -------------------------------------------------------------------------------------------------------------
 Fase 1 desarrollo local: 
 uvicorn app.main:app --reload
 
 ejecutar ambiente de python
+python3 -m venv .venv   →  Crear un entorno virtual en tu proyecto:
+source .venv/bin/activate  → Activar el entorno virtual:
+
 
 
 curl -X GET http://localhost:8000/generate-jwt
@@ -58,7 +60,7 @@ Quieres cambiar la imagen base (FROM python:...)
 Actualizas dependencias (pip, apt, etc.)
 Cambias la CMD o ENTRYPOINT
 
-- Cosntruir contenedor:
+- Construir contenedor:
 
 docker rm -f devops-microservice
 docker rmi devops-microservice:local
@@ -142,6 +144,22 @@ Prender el contenedor con:
 ------------------------------------------------------------------------------------------
 generar jwt
 python -m app.utils.generate_jwt
+
+
+
+
+
+
+
+
+
+
+
+Nota:de qui en adelante lo único que falta es automatizar estos pasos manuales y que el JWT sea único por transacción
+ya que con 2 réplicas, si el segundo request cae en el otro pod, ese pod no sabe que el token ya se usó y lo acepta.
+Tocaría usar Redis o consultar que paso con esto del sticky session 
+
+
 
 ------------------------------------------------------------------------------------------
 
@@ -589,6 +607,23 @@ git add .
 git commit -m "Adicion algún cambio"
 git push origin dev
 
+Para irnos a merge a master
+
+# Cambia a la rama master
+git checkout master
+
+# Trae los últimos cambios de master
+git pull origin master
+
+# Haz el merge de dev
+git merge dev
+
+# Resuelve conflictos si aparecen (VS Code ayuda mucho aquí)
+
+# Sube el resultado
+git push origin master
+
+
 
 
 Ve a Actions en GitHub y mira correr los jobs:
@@ -605,6 +640,22 @@ kubectl -n devops get deploy devops-app -o yaml | grep -A1 "image:"
 kubectl -n devops get pods -o wide
 
 
+una ves todo el pipeline pasó y esta en verde, ejecutamos:
+
+HOST="henrydevops.duckdns.org"
+
+JWT="$(curl -s "https://${HOST}/generate-jwt" | sed -E 's/.*"jwt":"([^"]+)".*/\1/')"
+
+curl -X POST "https://${HOST}/DevOps" \
+  -H "X-Parse-REST-API-Key: 2f5ae96c-b558-4c7b-a590-a501ae1c3f6c" \
+  -H "X-JWT-KWY: ${JWT}" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"This is a test","to":"Juan Perez","from":"Rita Asturia","timeToLifeSec":45}'
+
+Y listo, se terminó.
+
+
+
 -----------------------------------------------------------------------------------------
 Para borrar:
 
@@ -613,7 +664,6 @@ kubectl delete service devops-service
 kubectl delete ingress devops-ingress
 kubectl delete secret devops-secrets
 kubectl delete secret devops-tls-secret
-az network public-ip delete --resource-group DevOpsRG --name devops-ingress-ip
 
 
 kubectl apply -f k8s/
