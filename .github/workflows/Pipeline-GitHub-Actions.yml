@@ -56,7 +56,7 @@ jobs:
           SECRET_KEY: "test-secret"
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python -m pytest -q tests --cov=app --cov-report=term-missing
+          python -m pytest -q --cov=app --cov-report=term-missing
 
 
   build_push:
