@@ -42,21 +42,21 @@ jobs:
       - name: Static Security (bandit)
         run: bandit -r app
 
-      - name: Set PYTHONPATH 
-        run: echo "PYTHONPATH=$GITHUB_WORKSPACE" >> $GITHUB_ENV
-
-
-      - name: Debug repo tree
+      - name: Debug paths
         run: |
-          pwd
+          echo "PWD=$(pwd)"
+          echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
           ls -la
-          find . -maxdepth 3 -type f | sort
-          
+          echo "---- tests ----"
+          ls -la tests || true
+
       - name: Tests (pytest + coverage)
         env:
           API_KEY: "2f5ae96c-b558-4c7b-a590-a501ae1c3f6c"
           SECRET_KEY: "test-secret"
-        run: pytest -q tests --cov=app --cov-report=term-missing
+        run: |
+          python -m pytest -q ./tests/test_main.py --cov=app --cov-report=term-missing
+
 
 
   build_push:
