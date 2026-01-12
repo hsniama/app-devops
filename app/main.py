@@ -1,3 +1,5 @@
+# app/main.py
+
 from typing import Optional
 import os
 
@@ -7,8 +9,8 @@ from pydantic import BaseModel, Field
 
 from app.utils.jwt_handler import create_jwt, verify_jwt
 
-# Carga solo afecta al entorno local; en Azure usas variables del sistema
-load_dotenv()  # local only; Azure uses real env vars
+# Local dev only. In Azure/K8s, env vars are injected by Secrets.
+load_dotenv()
 
 app = FastAPI()
 
@@ -23,36 +25,24 @@ class DevOpsPayload(BaseModel):
     timeToLifeSec: int
 
 
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok"}
+
+
 @app.post("/DevOps")
 async def devops_endpoint(
     payload: DevOpsPayload,
-    x_parse_rest_api_key: Optional[str] = Header(
-        default=None,
-        alias="X-Parse-REST-API-Key",
-    ),
-    x_jwt_kwy: Optional[str] = Header(
-        default=None,
-        alias="X-JWT-KWY",
-    ),
+    x_parse_rest_api_key: Optional[str] = Header(default=None, alias="X-Parse-REST-API-Key"),
+    x_jwt_kwy: Optional[str] = Header(default=None, alias="X-JWT-KWY"),
 ):
-    if (
-        not x_parse_rest_api_key
-        or x_parse_rest_api_key != EXPECTED_API_KEY
-    ):
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or missing API Key",
-        )
+    if not x_parse_rest_api_key or x_parse_rest_api_key != EXPECTED_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing API Key")
 
     if not x_jwt_kwy or not verify_jwt(x_jwt_kwy):
         raise HTTPException(status_code=403, detail="Invalid or missing JWT")
 
-    return {
-        "message": (
-            f"Hello {payload.to} "
-            f"your message will be send"
-        )
-    }
+    return {"message": f"Hello {payload.to} your message will be send"}
 
 
 @app.api_route("/DevOps", methods=["GET", "PUT", "DELETE", "PATCH"])
@@ -68,6 +58,6 @@ def generate_jwt_endpoint():
     token = create_jwt(
         {"user": "test"},
         secret_key=SECRET_KEY,
-        expires_in=604800,
+        expires_in=604800,  # 7 days
     )
     return {"jwt": token}

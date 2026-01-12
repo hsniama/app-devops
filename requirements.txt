@@ -33,6 +33,4 @@ stevedore==5.4.1
 typing_extensions==4.12.2
 uvicorn==0.34.0 # Versión segura (mantener)
 gunicorn==23.0.0 # Se pasa de 21.2.0 a 23.0.0 para corregir/remediar CVE-2024-1135 y CVE-2024-6827 (HTTP Smuggling)
-
-
-
+redis==5.0.4

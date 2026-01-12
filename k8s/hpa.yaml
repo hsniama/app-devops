@@ -2,7 +2,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: devops-app-hpa
-  namespace: devops
+  namespace: <NAMESPACE>
 spec:
   scaleTargetRef:
     apiVersion: apps/v1

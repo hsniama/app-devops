@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: devops-app
-  namespace: devops
+  namespace: <NAMESPACE>
   labels:
     app: devops-app
 spec:
@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: app
-          image: "<ACR_LOGIN_SERVER>/<IMAGE_NAME>:<IMAGE_TAG>"  # ej: acrdevopshenry.azurecr.io/devops-microservice:v1.0.0
+          image: "<ACR_LOGIN_SERVER>/<IMAGE_NAME>:<IMAGE_TAG>"
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
@@ -34,16 +34,18 @@ spec:
                   key: API_KEY
             - name: JWT_EXP_MINUTES
               value: "60"
+            - name: REDIS_URL
+              value: "redis://redis:6379/0"
           readinessProbe:
             httpGet:
-              path: /docs
+              path: /healthz
               port: 8000
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 3
           livenessProbe:
             httpGet:
-              path: /docs
+              path: /healthz
               port: 8000
             initialDelaySeconds: 20
             periodSeconds: 20
@@ -60,7 +62,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: devops-service
-  namespace: devops
+  namespace: <NAMESPACE>
   labels:
     app: devops-app
 spec:

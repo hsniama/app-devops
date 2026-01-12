@@ -2,59 +2,62 @@ name: CI-CD
 
 on:
   push:
-    branches: ["**"]  # corre en cualquier rama (deploy solo en dev/master)
+    branches:
+      - "main"
+      - "dev/**"
   pull_request:
+    branches: ["main"]
   workflow_dispatch:
 
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
 env:
-  RG: rg-devops-henry
-  AKS_NAME: aks-devops-henry
-  ACR_NAME: acrdevopshenry
-  IMAGE_NAME: devops-microservice
-  NAMESPACE: devops
+  PYTHON_VERSION: "3.12"
 
 jobs:
   ci:
-    name: Fase Lint + Test
+    name: Lint + SAST + Tests
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
 
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install -r requirements-dev.txt
 
       - name: Lint (flake8)
         run: flake8 .
 
-      - name: Security (bandit)
+      - name: Static Security (bandit)
         run: bandit -r app
 
-      - name: Tests (pytest)
+      - name: Tests (pytest + coverage)
         env:
-          API_KEY: ${{ secrets.API_KEY }}
-          SECRET_KEY: ${{ secrets.SECRET_KEY }}
-        run: pytest -q
+          API_KEY: "2f5ae96c-b558-4c7b-a590-a501ae1c3f6c"
+          SECRET_KEY: "test-secret"
+        run: pytest -q --cov=app --cov-report=term-missing
+
 
   build_push:
-    name: Fase Build & Push to ACR (ACR Tasks)
+    name: Build & Push to ACR (ACR Tasks)
     needs: ci
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
+
+    # dev/** => env dev, main => env prod
+    environment: ${{ github.ref_name == 'main' && 'prod' || 'dev' }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Azure login (OIDC)
         uses: azure/login@v2
@@ -63,50 +66,42 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: ACR login server
+      - name: Resolve ACR login server
         id: acr
         shell: bash
         run: |
           set -euo pipefail
-          ACR_LOGIN_SERVER=$(az acr show -n "$ACR_NAME" -g "$RG" --query loginServer -o tsv)
-          echo "login=$ACR_LOGIN_SERVER" >> "$GITHUB_OUTPUT"
+          LOGIN=$(az acr show -n "${{ vars.ACR_NAME }}" -g "${{ vars.RG }}" --query loginServer -o tsv)
+          echo "login=$LOGIN" >> "$GITHUB_OUTPUT"
 
-      - name: "ACR Build (tags: sha y branch)"
+      - name: "ACR Build (tags: sha + branch)"
         shell: bash
         run: |
           set -euo pipefail
           LOGIN="${{ steps.acr.outputs.login }}"
-          # nombre de rama seguro (dev/master en tu caso)
           BRANCH="${GITHUB_REF_NAME//\//-}"
 
-          IMAGE_SHA="${LOGIN}/${IMAGE_NAME}:${{ github.sha }}"
-          IMAGE_BRA="${LOGIN}/${IMAGE_NAME}:${BRANCH}"
+          IMAGE_SHA="${LOGIN}/${{ vars.IMAGE_NAME }}:${{ github.sha }}"
+          IMAGE_BRA="${LOGIN}/${{ vars.IMAGE_NAME }}:${BRANCH}"
 
-          echo "Building $IMAGE_SHA and $IMAGE_BRA"
           az acr build \
-            --registry "$ACR_NAME" \
+            --registry "${{ vars.ACR_NAME }}" \
             --image "$IMAGE_SHA" \
             --image "$IMAGE_BRA" \
             .
 
-      - name: Set outputs
-        id: img
-        shell: bash
-        run: |
-          echo "image_sha=${{ steps.acr.outputs.login }}/${IMAGE_NAME}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
-
   deploy:
-    name: Fase Deploy to AKS
+    name: Deploy to AKS
     needs: build_push
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/master'
-    permissions:
-      id-token: write
-      contents: read
+
+    # SOLO deploy en pushes (dev/** o main). PR a main no despliega.
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+
+    environment: ${{ github.ref_name == 'main' && 'prod' || 'dev' }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Azure login (OIDC)
         uses: azure/login@v2
@@ -127,40 +122,106 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          az aks get-credentials -g "$RG" -n "$AKS_NAME" --overwrite-existing
+          az aks get-credentials -g "${{ vars.RG }}" -n "${{ vars.AKS_NAME }}" --overwrite-existing
           kubelogin convert-kubeconfig -l azurecli
           kubectl cluster-info
 
-      # (Opcional) Ver el arbol para confirmar rutas
-      - name: Show repo tree
-        run: |
-          pwd
-          ls -la
-          echo "---- k8s ----"
-          ls -la k8s
+      - name: Install helm
+        uses: azure/setup-helm@v4
 
-      - name: Apply base manifests (namespace/secret/svc/ingress/hpa)
-        shell: bash
-        env:
-          HOST: henrydevops.duckdns.org
-        run: |
-          set -euo pipefail
-          kubectl apply -f k8s/namespace-secrets.yaml
-          kubectl apply -f k8s/deployment-service.yaml
-          sed -e "s|<HOST>|$HOST|g" k8s/ingress.yaml | kubectl apply -f -
-          kubectl apply -f k8s/hpa.yaml
-
-
-      - name: Set new image (immutable SHA)
+      - name: Install ingress-nginx (if missing)
         shell: bash
         run: |
           set -euo pipefail
-          ACR_LOGIN_SERVER=$(az acr show -n "$ACR_NAME" -g "$RG" --query loginServer -o tsv)
-          IMAGE="${ACR_LOGIN_SERVER}/${IMAGE_NAME}:${{ github.sha }}"
-          echo "Deploying image: $IMAGE"
-          kubectl -n "$NAMESPACE" set image deployment/devops-app app="$IMAGE"
-          kubectl -n "$NAMESPACE" rollout status deployment/devops-app --timeout=120s
+          kubectl get ns ingress-nginx >/dev/null 2>&1 || kubectl create ns ingress-nginx
+          if ! kubectl -n ingress-nginx get deploy ingress-nginx-controller >/dev/null 2>&1; then
+            helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+            helm repo update
+            helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+              -n ingress-nginx \
+              --set controller.replicaCount=2 \
+              --set controller.service.externalTrafficPolicy=Local
+          fi
+
+      - name: Install cert-manager (if missing)
+        shell: bash
+        run: |
+          set -euo pipefail
+          kubectl get ns cert-manager >/dev/null 2>&1 || kubectl create ns cert-manager
+          if ! kubectl -n cert-manager get deploy cert-manager >/dev/null 2>&1; then
+            helm repo add jetstack https://charts.jetstack.io
+            helm repo update
+            helm upgrade --install cert-manager jetstack/cert-manager \
+              -n cert-manager \
+              --set crds.enabled=true
+          fi
+
+      - name: Apply ClusterIssuers
+        run: kubectl apply -f k8s/cluster-issuer.yaml
+
+      - name: Ensure Namespace
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed "s|<NAMESPACE>|${{ vars.NAMESPACE }}|g" k8s/namespace.yaml | kubectl apply -f -
+
+      - name: Create/Update app secrets (API_KEY + SECRET_KEY)
+        shell: bash
+        run: |
+          set -euo pipefail
+          kubectl -n "${{ vars.NAMESPACE }}" create secret generic devops-secrets \
+            --from-literal=API_KEY='${{ secrets.API_KEY }}' \
+            --from-literal=SECRET_KEY='${{ secrets.SECRET_KEY }}' \
+            -o yaml --dry-run=client | kubectl apply -f -
+
+      - name: Deploy Redis
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed "s|<NAMESPACE>|${{ vars.NAMESPACE }}|g" k8s/redis.yaml | kubectl apply -f -
+
+      - name: Deploy app manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          # deployment/service
+          sed -e "s|<NAMESPACE>|${{ vars.NAMESPACE }}|g" \
+              -e "s|<ACR_LOGIN_SERVER>|dummy|g" \
+              -e "s|<IMAGE_NAME>|dummy|g" \
+              -e "s|<IMAGE_TAG>|dummy|g" \
+              k8s/deployment-service.yaml | kubectl apply -f -
+
+          # hpa
+          sed "s|<NAMESPACE>|${{ vars.NAMESPACE }}|g" k8s/hpa.yaml | kubectl apply -f -
+
+      - name: Apply Ingress (HOST + ISSUER + NAMESPACE)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -e "s|<NAMESPACE>|${{ vars.NAMESPACE }}|g" \
+              -e "s|<HOST>|${{ vars.HOST }}|g" \
+              -e "s|<LETSENCRYPT_ISSUER>|${{ vars.LETSENCRYPT_ISSUER }}|g" \
+              k8s/ingress.yaml | kubectl apply -f -
+
+      - name: Set image to immutable SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOGIN=$(az acr show -n "${{ vars.ACR_NAME }}" -g "${{ vars.RG }}" --query loginServer -o tsv)
+          IMAGE="${LOGIN}/${{ vars.IMAGE_NAME }}:${{ github.sha }}"
+          kubectl -n "${{ vars.NAMESPACE }}" set image deployment/devops-app app="$IMAGE"
+          kubectl -n "${{ vars.NAMESPACE }}" rollout status deployment/devops-app --timeout=180s
 
       - name: Show status
+        run: kubectl -n "${{ vars.NAMESPACE }}" get deploy,po,svc,ingress,hpa -o wide
+
+      - name: Smoke test (GET jwt + POST DevOps)
+        shell: bash
         run: |
-          kubectl -n "$NAMESPACE" get deploy,po,svc,ingress,hpa -o wide
+          set -euo pipefail
+          JWT="$(curl -sk "https://${{ vars.HOST }}/generate-jwt" | sed -E 's/.*"jwt":"([^"]+)".*/\1/')"
+          curl -sk -X POST "https://${{ vars.HOST }}/DevOps" \
+            -H "X-Parse-REST-API-Key: ${{ secrets.API_KEY }}" \
+            -H "X-JWT-KWY: ${JWT}" \
+            -H "Content-Type: application/json" \
+            -d '{"message":"This is a test","to":"Juan Perez","from":"Rita Asturia","timeToLifeSec":45}'
