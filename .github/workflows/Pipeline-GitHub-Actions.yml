@@ -216,13 +216,52 @@ jobs:
       - name: Show status
         run: kubectl -n "${{ vars.NAMESPACE }}" get deploy,po,svc,ingress,hpa -o wide
 
-      - name: Smoke test (GET jwt + POST DevOps)
+      - name: Wait for Ingress LB IP
         shell: bash
         run: |
           set -euo pipefail
-          JWT="$(curl -sk "https://${{ vars.HOST }}/generate-jwt" | sed -E 's/.*"jwt":"([^"]+)".*/\1/')"
-          curl -sk -X POST "https://${{ vars.HOST }}/DevOps" \
+          echo "Waiting for ingress-nginx LoadBalancer IP..."
+          for i in {1..60}; do
+            IP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+            if [[ -n "${IP}" ]]; then
+              echo "Ingress IP: ${IP}"
+              echo "INGRESS_IP=${IP}" >> $GITHUB_ENV
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Timed out waiting for ingress IP"
+          kubectl -n ingress-nginx get svc -o wide || true
+          exit 1
+
+      - name: Smoke test via Ingress IP (HTTP)
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="http://${INGRESS_IP}"
+
+          echo "GET ${BASE}/generate-jwt"
+          JWT="$(curl -s "${BASE}/generate-jwt" | sed -E 's/.*"jwt":"([^"]+)".*/\1/')"
+          if [[ -z "${JWT}" ]]; then
+            echo "JWT was empty. Dumping response:"
+            curl -v "${BASE}/generate-jwt" || true
+            exit 1
+          fi
+
+          echo "POST ${BASE}/DevOps"
+          curl -sS -X POST "${BASE}/DevOps" \
             -H "X-Parse-REST-API-Key: ${{ secrets.API_KEY }}" \
             -H "X-JWT-KWY: ${JWT}" \
             -H "Content-Type: application/json" \
-            -d '{"message":"This is a test","to":"Juan Perez","from":"Rita Asturia","timeToLifeSec":45}'
+            -d '{"message":"This is a test","to":"Juan Perez","from":"Rita Asturia","timeToLifeSec":45}' | cat
+
+      - name: Update DuckDNS record
+        shell: bash
+        run: |
+          set -euo pipefail
+          DOMAIN="${{ vars.HOST }}"
+          SUBDOMAIN="${DOMAIN%%.*}"   # henrydevops-dev o henrydevops-prod
+          echo "Updating DuckDNS ${SUBDOMAIN} -> ${INGRESS_IP}"
+
+          curl -s "https://www.duckdns.org/update?domains=${SUBDOMAIN}&token=${{ secrets.DUCKDNS_TOKEN }}&ip=${INGRESS_IP}" | tee /tmp/duckdns.txt
+          grep -q "OK" /tmp/duckdns.txt
