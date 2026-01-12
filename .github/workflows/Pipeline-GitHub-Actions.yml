@@ -45,6 +45,13 @@ jobs:
       - name: Set PYTHONPATH 
         run: echo "PYTHONPATH=$GITHUB_WORKSPACE" >> $GITHUB_ENV
 
+
+      - name: Debug repo tree
+        run: |
+          pwd
+          ls -la
+          find . -maxdepth 3 -type f | sort
+          
       - name: Tests (pytest + coverage)
         env:
           API_KEY: "2f5ae96c-b558-4c7b-a590-a501ae1c3f6c"
