@@ -6,6 +6,7 @@ import os
 os.environ.setdefault("API_KEY", "2f5ae96c-b558-4c7b-a590-a501ae1c3f6c")
 os.environ.setdefault("SECRET_KEY", "test-secret")
 
+from app.utils.token_store import reset_token_store_for_tests  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from app.main import app  # noqa: E402
 from app.utils.jwt_handler import create_jwt  # noqa: E402
@@ -24,6 +25,9 @@ def _payload() -> dict:
 
 
 def test_valid_post_and_token_is_one_time():
+    # ✅ Limpia el store para que el test sea determinista (no depende de otros tests)
+    reset_token_store_for_tests()
+
     api_key = os.environ["API_KEY"]
     secret_key = os.environ["SECRET_KEY"]
 
@@ -49,6 +53,8 @@ def test_valid_post_and_token_is_one_time():
 
 
 def test_missing_api_key():
+    reset_token_store_for_tests()
+
     secret_key = os.environ["SECRET_KEY"]
     jwt_token = create_jwt({"user": "test"}, secret_key=secret_key, expires_in=60)
 
@@ -63,6 +69,8 @@ def test_missing_api_key():
 
 
 def test_invalid_jwt():
+    reset_token_store_for_tests()
+
     api_key = os.environ["API_KEY"]
 
     response = client.post(
@@ -76,18 +84,24 @@ def test_invalid_jwt():
 
 
 def test_invalid_method_get():
+    reset_token_store_for_tests()
+
     response = client.get("/DevOps")
     assert response.status_code == 200
     assert response.text == '"ERROR"'
 
 
 def test_generate_jwt():
+    reset_token_store_for_tests()
+
     response = client.get("/generate-jwt")
     assert response.status_code == 200
     assert "jwt" in response.json()
 
 
 def test_healthz():
+    reset_token_store_for_tests()
+
     response = client.get("/healthz")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"

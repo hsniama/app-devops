@@ -2,7 +2,7 @@
 
 Este microservicio implementado con **FastAPI** permite enviar un mensaje personalizado mediante un endpoint protegido por autenticación JWT y API Key. 
 
-Este Microservicio se puede correr de manera local, con docker y también en un clúster de **Azure Kubernetes Service (AKS)**. Este último aplica solo si tienes una sucripción en Azure Cloud.
+Este Microservicio se puede correr de manera local, con docker y también en un clúster de **Azure Kubernetes Service (AKS)**. Este último aplica solo si tienes una sucripción en Azure Cloud..
 
 ---
 
