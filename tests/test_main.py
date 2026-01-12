@@ -6,6 +6,7 @@ import os
 os.environ.setdefault("API_KEY", "2f5ae96c-b558-4c7b-a590-a501ae1c3f6c")
 os.environ.setdefault("SECRET_KEY", "test-secret")
 
+from app.utils.token_store import reset_token_store_for_tests
 from fastapi.testclient import TestClient  # noqa: E402
 from app.main import app  # noqa: E402
 from app.utils.jwt_handler import create_jwt  # noqa: E402
