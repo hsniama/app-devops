@@ -54,9 +54,9 @@ jobs:
         env:
           API_KEY: "2f5ae96c-b558-4c7b-a590-a501ae1c3f6c"
           SECRET_KEY: "test-secret"
+          PYTHONPATH: ${{ github.workspace }}
         run: |
-          python -m pytest -q ./tests/test_main.py --cov=app --cov-report=term-missing
-
+          python -m pytest -q tests --cov=app --cov-report=term-missing
 
 
   build_push:
