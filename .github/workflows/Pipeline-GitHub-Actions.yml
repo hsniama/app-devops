@@ -1,4 +1,4 @@
-name: Pipeline
+name: CI-CD
 
 on:
   push:
@@ -36,26 +36,16 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Lint (flake8)
-        continue-on-error: true
         run: flake8 .
 
       - name: Static Security (bandit)
         run: bandit -r app
 
-      - name: Debug paths
-        run: |
-          echo "PWD=$(pwd)"
-          echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
-          ls -la
-          echo "---- tests ----"
-          ls -la tests || true
-
       - name: Tests (pytest + coverage)
         env:
           API_KEY: "2f5ae96c-b558-4c7b-a590-a501ae1c3f6c"
           SECRET_KEY: "test-secret"
-          PYTHONPATH: ${{ github.workspace }}
-        run: pytest -q
+        run: pytest -q --cov=app --cov-report=term-missing
 
 
   build_push:
@@ -84,7 +74,7 @@ jobs:
           LOGIN=$(az acr show -n "${{ vars.ACR_NAME }}" -g "${{ vars.RG }}" --query loginServer -o tsv)
           echo "login=$LOGIN" >> "$GITHUB_OUTPUT"
 
-      - name: "ACR Build (tags: sha + branch)"
+      - name: ACR Build (tags: sha + branch)
         shell: bash
         run: |
           set -euo pipefail

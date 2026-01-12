@@ -1,65 +1,93 @@
-# app/utils/token_store.py
+# tests/test_main.py
 
 import os
-import time
-from functools import lru_cache
-from typing import Optional
 
-try:
-    import redis  # type: ignore
-except Exception:
-    redis = None
+# Set env vars BEFORE importing the app
+os.environ.setdefault("API_KEY", "2f5ae96c-b558-4c7b-a590-a501ae1c3f6c")
+os.environ.setdefault("SECRET_KEY", "test-secret")
 
-
-class TokenStore:
-    """Abstracción: permite marcar un token como usado 1 sola vez con TTL."""
-    def claim_once(self, key: str, ttl_seconds: int) -> bool:
-        raise NotImplementedError
+from fastapi.testclient import TestClient  # noqa: E402
+from app.main import app  # noqa: E402
+from app.utils.jwt_handler import create_jwt  # noqa: E402
 
 
-class InMemoryTokenStore(TokenStore):
-    """
-    Fallback para local/tests si no hay Redis.
-    NO sirve para multi-pod (en k8s debes usar Redis).
-    """
-    def __init__(self) -> None:
-        self._used: dict[str, float] = {}
-
-    def claim_once(self, key: str, ttl_seconds: int) -> bool:
-        now = time.time()
-
-        # Purga expirados
-        expired_keys = [k for k, exp in self._used.items() if exp <= now]
-        for k in expired_keys:
-            self._used.pop(k, None)
-
-        if key in self._used:
-            return False
-
-        self._used[key] = now + ttl_seconds
-        return True
+client = TestClient(app)
 
 
-class RedisTokenStore(TokenStore):
-    def __init__(self, url: str) -> None:
-        if redis is None:
-            raise RuntimeError("redis package not installed. Add redis to requirements.txt")
-        self._r = redis.Redis.from_url(url, decode_responses=True)
-
-    def claim_once(self, key: str, ttl_seconds: int) -> bool:
-        # SET key "1" NX EX <ttl>
-        ok = self._r.set(name=key, value="1", nx=True, ex=ttl_seconds)
-        return bool(ok)
+def _payload() -> dict:
+    return {
+        "message": "This is a test",
+        "to": "Juan Perez",
+        "from": "Rita Asturia",
+        "timeToLifeSec": 45,
+    }
 
 
-@lru_cache(maxsize=1)
-def get_token_store() -> TokenStore:
-    """
-    Devuelve SIEMPRE la misma instancia (singleton) por proceso.
-    - En k8s: usa Redis si REDIS_URL está set.
-    - En tests/local: usa memoria si no hay REDIS_URL.
-    """
-    url: Optional[str] = os.getenv("REDIS_URL")
-    if url:
-        return RedisTokenStore(url)
-    return InMemoryTokenStore()
+def test_valid_post_and_token_is_one_time():
+    api_key = os.environ["API_KEY"]
+    secret_key = os.environ["SECRET_KEY"]
+
+    jwt_token = create_jwt({"user": "test"}, secret_key=secret_key, expires_in=60)
+
+    # First use: OK
+    r1 = client.post(
+        "/DevOps",
+        headers={"X-Parse-REST-API-Key": api_key, "X-JWT-KWY": jwt_token},
+        json=_payload(),
+    )
+    assert r1.status_code == 200
+    assert r1.json()["message"] == "Hello Juan Perez your message will be send"
+
+    # Second use (same JWT): must fail (unique per transaction)
+    r2 = client.post(
+        "/DevOps",
+        headers={"X-Parse-REST-API-Key": api_key, "X-JWT-KWY": jwt_token},
+        json=_payload(),
+    )
+    assert r2.status_code == 403
+    assert r2.json()["detail"] == "Invalid or missing JWT"
+
+
+def test_missing_api_key():
+    secret_key = os.environ["SECRET_KEY"]
+    jwt_token = create_jwt({"user": "test"}, secret_key=secret_key, expires_in=60)
+
+    response = client.post(
+        "/DevOps",
+        headers={"X-JWT-KWY": jwt_token},
+        json=_payload(),
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid or missing API Key"
+
+
+def test_invalid_jwt():
+    api_key = os.environ["API_KEY"]
+
+    response = client.post(
+        "/DevOps",
+        headers={"X-Parse-REST-API-Key": api_key, "X-JWT-KWY": "invalid.token.value"},
+        json=_payload(),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Invalid or missing JWT"
+
+
+def test_invalid_method_get():
+    response = client.get("/DevOps")
+    assert response.status_code == 200
+    assert response.text == '"ERROR"'
+
+
+def test_generate_jwt():
+    response = client.get("/generate-jwt")
+    assert response.status_code == 200
+    assert "jwt" in response.json()
+
+
+def test_healthz():
+    response = client.get("/healthz")
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
