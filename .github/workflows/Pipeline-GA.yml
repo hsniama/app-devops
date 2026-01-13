@@ -2,6 +2,8 @@ name: Pipeline-App
 
 on:
   workflow_dispatch:
+  # pull_request:
+  #   branches: ["main"]
   push:
     branches:
       - "main"
@@ -17,7 +19,7 @@ env:
 
 jobs:
   ci:
-    name: Lint + Tests
+    name: Lint + SAST + Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,8 +48,9 @@ jobs:
           SECRET_KEY: "test-secret"
         run: pytest -q --cov=app --cov-report=term-missing
 
+
   build_push:
-    name: Build & Push to ACR
+    name: Build & Push to ACR (ACR Tasks)
     needs: ci
     runs-on: ubuntu-latest
 
@@ -182,12 +185,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # deployment/service
           sed -e "s|<NAMESPACE>|${{ vars.NAMESPACE }}|g" \
               -e "s|<ACR_LOGIN_SERVER>|dummy|g" \
               -e "s|<IMAGE_NAME>|dummy|g" \
               -e "s|<IMAGE_TAG>|dummy|g" \
               k8s/deployment-service.yaml | kubectl apply -f -
 
+          # hpa
           sed "s|<NAMESPACE>|${{ vars.NAMESPACE }}|g" k8s/hpa.yaml | kubectl apply -f -
 
       - name: Apply Ingress (HOST + ISSUER + NAMESPACE)
@@ -229,80 +234,34 @@ jobs:
           kubectl -n ingress-nginx get svc -o wide || true
           exit 1
 
-      #Smoke test por IP PERO con Host header (si no, 400)
-      - name: Smoke test via Ingress IP (HTTP + Host header)
+      - name: Smoke test via Ingress IP (HTTP)
         shell: bash
         run: |
           set -euo pipefail
-          IP="${INGRESS_IP}"
-          HOST="${{ vars.HOST }}"
+          BASE="http://${INGRESS_IP}"
 
-          echo "GET http://${IP}/generate-jwt (Host: ${HOST})"
-          JWT="$(curl -s "http://${IP}/generate-jwt" -H "Host: ${HOST}" | sed -E 's/.*"jwt":"([^"]+)".*/\1/')"
+          echo "GET ${BASE}/generate-jwt"
+          JWT="$(curl -s "${BASE}/generate-jwt" | sed -E 's/.*"jwt":"([^"]+)".*/\1/')"
           if [[ -z "${JWT}" ]]; then
             echo "JWT was empty. Dumping response:"
-            curl -v "http://${IP}/generate-jwt" -H "Host: ${HOST}" || true
+            curl -v "${BASE}/generate-jwt" || true
             exit 1
           fi
 
-          echo "POST http://${IP}/DevOps (Host: ${HOST})"
-          curl -sS -X POST "http://${IP}/DevOps" \
-            -H "Host: ${HOST}" \
+          echo "POST ${BASE}/DevOps"
+          curl -sS -X POST "${BASE}/DevOps" \
             -H "X-Parse-REST-API-Key: ${{ secrets.API_KEY }}" \
             -H "X-JWT-KWY: ${JWT}" \
             -H "Content-Type: application/json" \
             -d '{"message":"This is a test","to":"Juan Perez","from":"Rita Asturia","timeToLifeSec":45}' | cat
 
-
-      # Mueve DuckDNS ANTES de validar HTTPS
       - name: Update DuckDNS record
         shell: bash
         run: |
           set -euo pipefail
           DOMAIN="${{ vars.HOST }}"
-          SUBDOMAIN="${DOMAIN%%.*}"
+          SUBDOMAIN="${DOMAIN%%.*}"   # henrydevops-dev o henrydevops-prod
           echo "Updating DuckDNS ${SUBDOMAIN} -> ${INGRESS_IP}"
 
           curl -s "https://www.duckdns.org/update?domains=${SUBDOMAIN}&token=${{ secrets.DUCKDNS_TOKEN }}&ip=${INGRESS_IP}" | tee /tmp/duckdns.txt
           grep -q "OK" /tmp/duckdns.txt
-
-      - name: Wait for DNS propagation
-        shell: bash
-        run: |
-          set -euo pipefail
-          HOST="${{ vars.HOST }}"
-          echo "Waiting for DNS ${HOST} -> ${INGRESS_IP}"
-          for i in {1..60}; do
-            RESOLVED="$(dig +short "${HOST}" | tail -n1 || true)"
-            echo "Resolved: ${RESOLVED}"
-            if [[ "${RESOLVED}" == "${INGRESS_IP}" ]]; then
-              echo "DNS OK"
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "Timed out waiting DNS propagation"
-          exit 1
-
-      # Validación HTTPS sin -k, evitando caches: --resolve fuerza host->IP
-      - name: Smoke test HTTPS (no -k) via --resolve
-        shell: bash
-        run: |
-          set -euo pipefail
-          HOST="${{ vars.HOST }}"
-          IP="${INGRESS_IP}"
-
-          echo "GET https://${HOST}/generate-jwt (resolve ${HOST}:443:${IP})"
-          JWT="$(curl -sS --resolve "${HOST}:443:${IP}" "https://${HOST}/generate-jwt" | sed -E 's/.*"jwt":"([^"]+)".*/\1/')"
-          if [[ -z "${JWT}" ]]; then
-            echo "JWT empty. Dumping TLS debug:"
-            curl -v --resolve "${HOST}:443:${IP}" "https://${HOST}/generate-jwt" || true
-            exit 1
-          fi
-
-          echo "POST https://${HOST}/DevOps (resolve ${HOST}:443:${IP})"
-          curl -sS --resolve "${HOST}:443:${IP}" -X POST "https://${HOST}/DevOps" \
-            -H "X-Parse-REST-API-Key: ${{ secrets.API_KEY }}" \
-            -H "X-JWT-KWY: ${JWT}" \
-            -H "Content-Type: application/json" \
-            -d '{"message":"This is a test","to":"Juan Perez","from":"Rita Asturia","timeToLifeSec":45}' | cat
