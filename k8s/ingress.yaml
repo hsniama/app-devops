@@ -5,7 +5,7 @@ metadata:
   namespace: <NAMESPACE>
   annotations:
     # cert-manager.io/cluster-issuer: "<LETSENCRYPT_ISSUER>" // Example: letsencrypt-prod o letsencrypt-staging de acuerdo a Variable steada en GitHub de acuerdo al environment.
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    cert-manager.io/cluster-issuer: "<LETSENCRYPT_ISSUER>"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
 spec:
