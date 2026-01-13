@@ -104,12 +104,12 @@ HOST="henrydevops-prod.duckdns.org"
 ### 2. Obtener el JWT
 
 ```bash 
-JWT="$(curl https://${HOST}/generate-jwt | sed -E 's/.*"jwt":"([^"]+)".*/\1/')"
+JWT="$(curl -sk https://${HOST}/generate-jwt | sed -E 's/.*"jwt":"([^"]+)".*/\1/')"
 ```
 ### 3. Consumir el endpoint protegido
 
 ```bash 
-curl -X POST \
+  curl -sk -X POST \
   -H "X-Parse-REST-API-Key: 2f5ae96c-b558-4c7b-a590-a501ae1c3f6c" \
   -H "X-JWT-KWY: ${JWT}" \
   -H "Content-Type: application/json" \
