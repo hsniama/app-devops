@@ -48,7 +48,7 @@ Si clonaste el repositorio y creaste el entorno virtual e instalastes las depend
 ```bash
 uvicorn app.main:app --reload
 ```
-![Aplicación corriendo de manera local](./assets/img/4.png)
+![Aplicación corriendo de manera local](./img/4.png)
 
 Ahora ya puedes ejecutar los 2 endpoint mencionados anteriormente o acceder a Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
 
@@ -86,7 +86,7 @@ docker run --name devops-microservice \
   -p 8000:8000 \
   devops-microservice
 ```
-![Aplicación corriendo con docker](./assets/img/6.png)
+![Aplicación corriendo con docker](./img/6.png)
 
 Ahora ya puedes ejecutar los 2 endpoint mencionados anteriormente y probar el microservicio.
 
@@ -129,7 +129,7 @@ echo "AZURE_SUBSCRIPTION_ID=$SUBSCRIPTION_ID"
 
 Esto es opcional y sirve para asignar un nombre de dominio fijo a la dirección nuestro ingress IP.
 
-![Generación de tokens y creación de dominios para dev y prod](./assets/img/8.png)
+![Generación de tokens y creación de dominios para dev y prod](./img/8.png)
 
 [https://www.duckdns.org/](https://www.duckdns.org/)
 
@@ -138,7 +138,7 @@ Esto es opcional y sirve para asignar un nombre de dominio fijo a la dirección 
 
 Crear los dos ambientes de `dev` y `prod` en GitHub:
 
-![Ambientes para dev y prod](./assets/img/9.png)
+![Ambientes para dev y prod](./img/9.png)
 
 Tener en cuenta que en `prod` se debe agregar la protection rule de required provider.
 
@@ -146,9 +146,9 @@ Tener en cuenta que en `prod` se debe agregar la protection rule de required pro
 
 Crear los siguientes actions secrets y variables
 
-![Action Secrets](./assets/img/10.png)
+![Action Secrets](./img/10.png)
 
-![Action Variables](./assets/img/11.png)
+![Action Variables](./img/11.png)
 
 En el secret `SECRET_KEY` poner el valor que se encuentra en el archivo **.env** del repositorio.
 
