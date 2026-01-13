@@ -238,7 +238,7 @@ jobs:
           HOST="${{ vars.HOST }}"
 
           echo "GET http://${IP}/generate-jwt (Host: ${HOST})"
-          JWT="$(curl -s "http://${IP}/generate-jwt" -H "Host: ${HOST }" | sed -E 's/.*"jwt":"([^"]+)".*/\1/')"
+          JWT="$(curl -s "http://${IP}/generate-jwt" -H "Host: ${HOST}" | sed -E 's/.*"jwt":"([^"]+)".*/\1/')"
           if [[ -z "${JWT}" ]]; then
             echo "JWT was empty. Dumping response:"
             curl -v "http://${IP}/generate-jwt" -H "Host: ${HOST}" || true
@@ -246,11 +246,13 @@ jobs:
           fi
 
           echo "POST http://${IP}/DevOps (Host: ${HOST})"
-          curl -sS -X POST "http://${IP}/DevOps" -H "Host: ${HOST}" \
+          curl -sS -X POST "http://${IP}/DevOps" \
+            -H "Host: ${HOST}" \
             -H "X-Parse-REST-API-Key: ${{ secrets.API_KEY }}" \
             -H "X-JWT-KWY: ${JWT}" \
             -H "Content-Type: application/json" \
             -d '{"message":"This is a test","to":"Juan Perez","from":"Rita Asturia","timeToLifeSec":45}' | cat
+
 
       # Mueve DuckDNS ANTES de validar HTTPS
       - name: Update DuckDNS record
