@@ -19,7 +19,7 @@ env:
 
 jobs:
   ci:
-    name: Lint + SAST + Tests
+    name: Lint + Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -50,7 +50,7 @@ jobs:
 
 
   build_push:
-    name: Build & Push to ACR (ACR Tasks)
+    name: Build & Push to ACR
     needs: ci
     runs-on: ubuntu-latest
 
