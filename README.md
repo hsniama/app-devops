@@ -1,4 +1,4 @@
-# DevOps Technical Assessment – End-to-End Solution
+# DevOps Technical Assessment – Solución
 
 Este proyecto implementa una solución DevOps sobre Azure, cumpliendo los requisitos funcionales y técnicos del assessment *assets/"Assessment - DevOps"*.
 
@@ -22,11 +22,11 @@ El flujo correcto es **Infra → App**.
 - Azure Container Registry (ACR) - *Repo 1*
 - GitHub Actions con OIDC  - *Repo 1 y 2*
 - ingress-nginx  - *Repo 2*
-- cert-manager + Let’s Encrypt (TLS real) - *Repo 2*
+- cert-manager + Let’s Encrypt (TLS real en Prod) - *Repo 2*
 - Redis (control de unicidad del JWT) - *Repo 2*
 - DuckDNS para resolución pública - *Repo 2*
 
-Todo el tráfico externo es **HTTPS**.
+Todo el tráfico externo es **HTTPS** para `prod` y **HTTP** para `dev`.
 
 ---
 
@@ -96,7 +96,7 @@ Si es para **DEV:**
 ```bash 
 HOST="henrydevops-dev.duckdns.org"
 ```
-Si es para **PROD:** 
+Si es para **PROD:** (previo despliege)
 ```bash 
 HOST="henrydevops-prod.duckdns.org"
 ```
@@ -136,18 +136,6 @@ Repetir el POST con el mismo JWT devuelve:
 
 ```
 
-## TLS / HTTPS
-
-- Certificados emitidos por Let’s Encrypt PROD
-- Cadena completa válida (sin -k)
-- Redirección forzada HTTP → HTTPS
-- Verificado con:
-
-
-```bash 
-openssl s_client -connect ${HOST}:443 -servername ${HOST}
-```
-
 ## CI/CD
 
 El pipeline ejecuta se ejecuta todo usando OIDC, sin secretos de Azure en GitHub.:
@@ -164,6 +152,10 @@ El pipeline ejecuta se ejecuta todo usando OIDC, sin secretos de Azure en GitHub
 
 ![Pipeline](./assets/img/7.png)
 
+No necesariamente necesitas modificar algo en la rama `dev/**`, se puede correr el workflow de forma manual:
+
+![Correr Pipeline Workflow manual](./assets/img/12.png)
+
 
 ## Conclusión
 
@@ -171,7 +163,7 @@ Esta solución cumple:
 
 - Infraestructura como código
 - CI/CD 
-- HTTPS válido
+- HTTPS válido (para prod)
 - Escalabilidad
 - Separación DEV / PROD
 
