@@ -1,56 +1,47 @@
 # DevOps Technical Assessment – Solución
 
-Este proyecto implementa una solución DevOps sobre Azure, cumpliendo los requisitos funcionales y técnicos del assessment *assets/"Assessment - DevOps"*.
+La solución DevOps del assesment *assets/"Assessment - DevOps.pdf* está compuesta por dos repositorios que trabajan en conjunto para desplegar una aplicación sobre Azure:
 
-La solución está dividida en **dos repositorios**, pero funciona como **un solo sistema**:
+### Infraestructura (Repo: `infra-devops`)
 
+- Azure Resource Groups: Separación lógica entre entornos `DEV` y `PROD`.
+- Azure Kubernetes Service (AKS): Clúster gestionado para orquestar contenedores.
+- Azure Container Registry (ACR): Almacén privado para imágenes Docker.
+- GitHub Actions con OIDC: Integración segura para despliegues automatizados sin secretos estáticos.
 
-- **1. Infraestructura (Terraform + Azure)**  – crea la plataforma base en Azure (IaC).
 [https://github.com/hsniama/infra-devops](https://github.com/hsniama/infra-devops)
 
-- **2. Aplicación (FastAPI + Kubernetes + CI/CD)**  – construye, despliega y expone el microservicio.
+### Aplicación (Repo: `app-devops`)
+
+- FastAPI + Redis: Microservicio con control de unicidad de JWT mediante Redis.
+- CI/CD con GitHub Actions: Pipeline automatizado para construir, testear y desplegar.
+- Ingress-nginx: Controlador de entrada HTTP para enrutar tráfico hacia los pods.
+- Cert-manager + Let's Encrypt: Emisión automática de certificados TLS reales en `PROD`.
+- DuckDNS: Resolución de dominio público para exponer el servicio externamente
+
 [https://github.com/hsniama/app-devops](https://github.com/hsniama/app-devops)
+
+### Seguridad y Entornos
+
+- Todo el tráfico externo en `PROD` se enruta por HTTPS con certificados válidos.
+- En `DEV`, se permite tráfico HTTP para facilitar pruebas locales.
 
 El flujo correcto es **Infra → App**.
 
 ---
 
-## Arquitectura general
+## Tecnologías usadas
 
-- Azure Resource Group (DEV / PROD) - *Repo 1*
-- Azure Kubernetes Service (AKS) - *Repo 1*
-- Azure Container Registry (ACR) - *Repo 1*
-- GitHub Actions con OIDC  - *Repo 1 y 2*
-- ingress-nginx  - *Repo 2*
-- cert-manager + Let’s Encrypt (TLS real en Prod) - *Repo 2*
-- Redis (control de unicidad del JWT) - *Repo 2*
-- DuckDNS para resolución pública - *Repo 2*
-
-Todo el tráfico externo es **HTTPS** para `prod` y **HTTP** para `dev`.
+- Programación: Python con FastAPI
+- Contenerización: Docker
+- IaC: Cloud Azure
+- CI/CD: GitHub Actions
 
 ---
 
-## Ambientes y ramas
+## Explicación
 
-| Rama Git        | Ambiente | Namespace        | Host público                      |
-|-----------------|----------|------------------|-----------------------------------|
-| `dev/**`        | DEV      | `devops-dev`     | `henrydevops-dev.duckdns.org`     |
-| `main` (merge)  | PROD     | `devops-prod`    | `henrydevops-prod.duckdns.org`    |
-
-- **DEV**: despliegue automático desde cualquier rama `dev/**`
-- **PROD**: solo se despliega al hacer **merge a `main`**
-
----
-
-# PARTE 1 – Infraestructura
-
-Repositorio: [https://github.com/hsniama/infra-devops](https://github.com/hsniama/infra-devops)
-
-*Dirigirse al link del Repositorio para entender el despliegue mediante IaC.*
-
-# PARTE 2 – Aplicación
-
-*Repositorio actual*
+Una ves hallamos desplegado primero la infraestructura del proyecto mediante el Repositorio: [https://github.com/hsniama/infra-devops](https://github.com/hsniama/infra-devops), vamos a entender más a fondo este repositorio de la aplicación.
 
 Este repo contiene:
 
@@ -60,27 +51,36 @@ Este repo contiene:
 - Pipeline CI/CD completo
 - Despliegue automático a AKS
 
-## Seguridad implementada
+### Seguridad implementada
 
 - API Key vía header
 - JWT firmado (SH256)
 - JWT válido una sola vez (one-time token)
-- Expiración real basada en exp
+- Expiración real del JWT
 - Redis para control de unicidad en Kubernetes
 - TLS con Let’s Encrypt PROD
 - Secrets gestionados con:
     - GitHub Environments
 
-## Endpoints expuestos
+### Ambientes y ramas
 
-### 1. Generar JWT
+| Rama Git        | Ambiente | Namespace        | Host público                      |
+|-----------------|----------|------------------|-----------------------------------|
+| `dev/**`        | DEV      | `devops-dev`     | `henrydevops-dev.duckdns.org`     |
+| `main` (merge)  | PROD     | `devops-prod`    | `henrydevops-prod.duckdns.org`    |
+
+- **DEV**: despliegue automático desde cualquier rama `dev/**`
+- **PROD**: solo se despliega al hacer **merge a `main`**
+
+### Endpoints expuestos
+
+#### 1. Generar JWT
 **Método:** `GET`  
-**Endpoint:** `/generate-jwt`  
-Devuelve un JWT válido una sola vez.
+**Endpoint:** `/generate-jwt`
 
----
+Devuelve un JWT válido una sola vez por transacción.
 
-### 2. Endpoint protegido
+#### 2. Endpoint protegido
 **Método:** `POST`  
 **Endpoint:** `/DevOps`  
 
@@ -88,8 +88,12 @@ Devuelve un JWT válido una sola vez.
 - `X-Parse-REST-API-Key`
 - `X-JWT-KWY`
 
+---
 
-## Cómo probar la solución (para el evaluador) 
+## Cómo probar la solución (para el evaluador)
+
+Abrir una terminar Unix:
+
 ### 1. Definir el HOST 
 
 Si es para **DEV:** 
@@ -136,9 +140,15 @@ Repetir el POST con el mismo JWT devuelve:
 
 ```
 
+Ejemplo práctico:
+
+![Ejecución endpoints](./assets/img/13.png)
+
+---
+
 ## CI/CD
 
-El pipeline ejecuta se ejecuta todo usando OIDC, sin secretos de Azure en GitHub.:
+El pipeline se ejecuta usando OIDC (no secrets de Azure) para autenticar GitHub Actions contra Azure.:
 
  1. Lint (flake8)
  2. SAST (bandit)
@@ -148,14 +158,13 @@ El pipeline ejecuta se ejecuta todo usando OIDC, sin secretos de Azure en GitHub
  6. Deploy a AKS
  7. Smoke test vía HTTPS
 
-
-
 ![Pipeline](./assets/img/7.png)
 
 No necesariamente necesitas modificar algo en la rama `dev/**`, se puede correr el workflow de forma manual:
 
 ![Correr Pipeline Workflow manual](./assets/img/12.png)
 
+---
 
 ## Conclusión
 
@@ -167,6 +176,6 @@ Esta solución cumple:
 - Escalabilidad
 - Separación DEV / PROD
 
-La solución es reproducible desde cero siguiendo este README:
+La solución es reproducible desde cero siguiendo el:
 
-- [EXECUTION README](assets/EXECUTION.md)
+- [EXECUTION.md](assets/EXECUTION.md) README

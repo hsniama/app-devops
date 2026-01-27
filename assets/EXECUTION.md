@@ -1,14 +1,13 @@
-## Descarga del Proyecto
+## Cómo correr el proyecto de forma Local
 
-### Clona el repositorio
+### 1. Clona el repositorio
 
 ```bash
-git clone https://github.com/hsniama/app-devops
-```
-```bash
+git clone https://github.com/hsniama/app-devops.git
 cd app-devops
 ```
-### Crea entorno virtual e instala dependencias
+
+### 2. Crea entorno virtual e instala dependencias
 
 **Elimina el entorno virtual**
 ```bash
@@ -34,27 +33,41 @@ pip install --upgrade pip
 ```bash
 pip install -r requirements.txt
 ```
+Si va a correr tests o usar herramientas de desarrollo, también puede instalar
+```bash
+pip install -r requirements-dev.txt
+```
+**Crear el archivo .env**
+```bash
+cp .env.example .env
+```
 
----
-
-## Ejecución del Proyecto.
-
-Existen 3 formas de probar este microservicio.
-
-### 1. Ejecutarlo de forma local con Uvicorn
-
-Si clonaste el repositorio y creaste el entorno virtual e instalastes las dependencias, ejecuta en una nueva terminal dentro de la ubicación del proyecto: 
-
+### 3. Correr la app localmente
+**Opción A: Usando Uvicorn directamente**
 ```bash
 uvicorn app.main:app --reload
 ```
 ![Aplicación corriendo de manera local](./img/4.png)
 
-Ahora ya puedes ejecutar los 2 endpoint mencionados anteriormente o acceder a Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
+Ya se puede probar los dos endpoint, que se observará como en la siguiente sección.
+
+**Opción B: Usando Docker**
+```bash
+docker build -t app-devops .
+docker run -p 8000:8000 --env-file .env app-devops
+```
+Ya se puede probar los dos endpoint, que se observará como en la siguiente sección.
+
+---
+
+## Probar el Proyecto de forma Local.
+
+Una ves el proyecto este corriendo localmente ya sea con la Opción A o la B, abrir el terminal y ejecutar lo siguiente para probar los 2 endpoint y entender su lógica de funcionamiento:
 
 ```bash
 curl -X GET http://localhost:8000/generate-jwt
 ```
+El resultado obtenido de este Curl Get, reemplazarlo en *X-JWT-KWY* del siguiente Curl Post:
 ```bash
 curl -X POST http://localhost:8000/DevOps \
   -H "X-Parse-REST-API-Key: 2f5ae96c-b558-4c7b-a590-a501ae1c3f6c" \
@@ -68,55 +81,43 @@ curl -X POST http://localhost:8000/DevOps \
 }'
 ```
 
-### 2. Ejecutarlo con Docker (Local)
+Adiciona, se puede ejecutar los 2 endpoint mencionados anteriormente a través de Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-Este microservicio puede correr completamente en un contenedor Docker antes de desplegarlo a la nube.
-Si clonaste el repositorio, sigue los siguientes pasos en una nueva terminal en la misma ubicación:
+---
 
+## Despliegue del proyecto en Azure mediante ACR y AKS (IaC)
 
-### Crear imagen y correr contenedor
-#### Creación de imagen
-```bash
-docker build -t devops-microservice .
-```
-#### Creación de contenedor (expone puerto 8000)
-```bash
-docker run --name devops-microservice \
-  --env-file .env \
-  -p 8000:8000 \
-  devops-microservice
-```
-![Aplicación corriendo con docker](./img/6.png)
+Ya sea que hayamos corrido o ejecutado el proyecto de forma local, la idea de este Assesment es hacerlo mediante la nube, en este caso, se hace con *Azure*. 
 
-Ahora ya puedes ejecutar los 2 endpoint mencionados anteriormente y probar el microservicio.
+Como requisito, nuestra Infraestructura (ACR, AKS, etc) debe estar desplegada, y se detalla en el siguiente repositorio: [https://github.com/hsniama/infra-devops](https://github.com/hsniama/infra-devops).
 
-Nota: Antes de crear el contenedor, debes **pausar** uvicorn del primer paso (Ctrl + Z) o cerrar esa terminal ya que el contenedor y el servidor web uvicorn local ocupan el mismo puerto 8000.
+Una vez desplegada, se sigue los siguientes pasos:
 
+#### 1. Creación del APP Registration + Service principal
 
-### 3. Despliegue en ACR y AKS (IaC)
+El siguiente script ubicado en la dirección *scripts/bootstrap-oidc.sh* automatiza la configuración de una integración entre GitHub Actions y Azure usando OIDC (OpenID Connect).
 
-#### Creación del APP Registration + Service principal
+Lo que realiza es lo siguiente: 
 
-Este script automatiza la creación de: 
+- Crear la App Registration en Entra ID
+- Asigna el rol Owner a la aplicación en el nivel de la suscripción de Azure.
+- Configurar credenciales federadas (OIDC) por Environments (dev y prod)
+- Finalmente, mostrar secretos para GitHub
 
-- App registration + service principal
-- Roles (Owner/Contributor + AKS + ACR + Storage si se necesita)
-- Federated credentials por GitHub Environments (dev y prod)
+Primero, entrar al script y cambiar los valores en verde por los tuyos:
 
-- Nota: 
-  - Aquí no tocamos el backend storage (eso es del repo infra).
-  - Este SP solo necesita permisos para ACR + AKS + RG del ambiente.
+![Valores](./img/14.png)
 
-Primero dar permisos al archivo:
+Segundo, dar permisos al archivo a través de la terminal:
 ```bash
 chmod +x scripts/bootstrap-oidc.sh
 ```
-Después ejecutarlo:
+Después, ejecutarlo:
 ```bash
 ./scripts/bootstrap-oidc.sh
 ```
 
-Como resultado de la ejecución del script se tiene los siguientes valores que deben ser seteados en GitHub Secrets en el repo de la aplicación:
+Como resultado de la ejecución del script se tiene los siguientes valores que deben ser seteados en GitHub Secrets en este repo de la aplicación:
 
 ```bash
 echo "Poner estos GitHub Secrets en el repo app-devops:"
@@ -125,34 +126,48 @@ echo "AZURE_TENANT_ID=$TENANT_ID"
 echo "AZURE_SUBSCRIPTION_ID=$SUBSCRIPTION_ID"
 ```
 
-#### Creación del token en DuckdDNS
+#### 2. Creación del token en DuckdDNS
 
-Esto es opcional y sirve para asignar un nombre de dominio fijo a la dirección nuestro ingress IP.
+Esto es opcional y sirve para asignar un nombre de dominio fijo a la dirección de nuestro ingress IP.
 
 ![Generación de tokens y creación de dominios para dev y prod](./img/8.png)
 
 [https://www.duckdns.org/](https://www.duckdns.org/)
 
 
-#### Environments en GitHub
+#### 3. Crear Environments en GitHub
 
-Crear los dos ambientes de `dev` y `prod` en GitHub:
+Crear los dos ambientes de `dev` y `prod` en el repositorio de GitHub:
 
 ![Ambientes para dev y prod](./img/9.png)
 
-Tener en cuenta que en `prod` se debe agregar la protection rule de required provider.
+Tener en cuenta que en `prod` se debe agregar la protection de "required reviewers" para que no se despliegue a prod sin aprobación.
 
-#### Actions secrets and variables
+#### Crear los Actions secrets and variables
 
-Crear los siguientes actions secrets y variables
+Crear los siguientes actions secrets y variables por ambiente en el repositorio de GitHub:
+
+**Actions:**
 
 ![Action Secrets](./img/10.png)
 
+En `SECRET_KEY` y `API_KEY` poner el valor que se encuentra en el archivo **.env** en el repositorio.
+En este caso, los dos valores previos y tambien el de `DUCKDNS_TOKEN` son los mismos para `dev` y `prod`.
+
+Nota: El valor de `DUCKDNS_TOKEN` l ogeneras en la página web logueandote con una cuenta y generando el token.
+
+**Variables:**
+
 ![Action Variables](./img/11.png)
 
-En el secret `SECRET_KEY` poner el valor que se encuentra en el archivo **.env** del repositorio.
+Tener en cuenta que los valores de `ACR_NAME`, `AKS_NAME` provienen del resultado del despliegue de la infraestructura del repositorio de Infra (IaC) y deben ser único globales.
 
-#### Visión general de Kubernetes
+Todas las demás variables pueden/deben ser las mismas.
+
+Una ves terminado de configurar todo, se puede crear la rama `dev/**` y hacer el primer push para desplegar al ambiente de `dev` y si se hace un merge a la rama `main` se despliega el microservicio a producción. 
+
+
+## Visión general de Kubernetes
 
 La aplicación se despliega en AKS usando Kubernetes manifests separados por responsabilidad:
 
@@ -165,38 +180,26 @@ La aplicación se despliega en AKS usando Kubernetes manifests separados por res
 
 Estos archivos se los encuentra en la ruta `./k8s`.
 
-#### Explicación del Pipeline
+## Explicación del Pipeline
 
-Este pipeline `/.github/workflows/Pipeline-GA.yml`. hace 3 cosas, en este orden:
+Este pipeline `/.github/workflows/Pipeline.yml`. hace 3 cosas, en el siguitene orden:
 
   - CI: valida calidad del código (lint), seguridad básica (bandit) y pruebas (pytest).
-
   - Build & Push: construye la imagen Docker y la publica en ACR usando az acr build (ACR Tasks).
-
   - Deploy: instala dependencias del cluster (ingress-nginx + cert-manager si faltan), aplica manifests, actualiza la imagen del Deployment a un tag inmutable (SHA), espera el rollout, y finalmente actualiza DuckDNS para que el dominio apunte a la IP del LoadBalancer.
 
 Además, usa OIDC (no secrets de Azure) para autenticar GitHub Actions contra Azure.
 
-#### Triggers y ejecución del proyecto
+![Pipeline](./img/15.png)
+
+### Triggers y ejecución del proyecto
 
 Una ves se haya realizado todas las configuraciones previas, y se tenga clonado el repositorio:
 
 - Si haces push a `dev/**` → corre pipeline y despliega a `DEV`.
-
-- Si haces push a `main` → corre pipeline y despliega a `PROD`.
-
+- Si haces merge a `main` desde `dev/**` → corre pipeline y despliega a `PROD`.
 - workflow_dispatch → lo puedes correr manualmente.
 
-**Importante:** aquí no hay pull_request.
-Eso significa: PR a main no corre pipeline, solo corre cuando ya se hace merge (push a main).
-
-```bash
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - "main"
-      - "dev/**"
-```
+![Pipeline Workflow](./img/16.png)
 
 Cualquier duda sobre el despliegue  y funcionamiento de este código, comunicarse con : [henryniama@hotmail.com](mailto:henryniama@hotmail.com)
