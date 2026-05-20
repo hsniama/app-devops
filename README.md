@@ -176,6 +176,6 @@ Esta solución cumple:
 - Escalabilidad
 - Separación DEV / PROD
 
-La solución es reproducible desde cero siguiendo el:
+La solución es reproducible desde cero siguiendo el README:
 
-- [EXECUTION.md](assets/EXECUTION.md) README
+- [EXECUTION.md](assets/EXECUTION.md)
