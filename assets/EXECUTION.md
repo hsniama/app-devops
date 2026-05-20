@@ -49,14 +49,12 @@ uvicorn app.main:app --reload
 ```
 ![Aplicación corriendo de manera local](./img/4.png)
 
-Ya se puede probar los dos endpoint, que se observará como en la siguiente sección.
-
 **Opción B: Usando Docker**
 ```bash
 docker build -t app-devops .
 docker run -p 8000:8000 --env-file .env app-devops
 ```
-Ya se puede probar los dos endpoint, que se observará como en la siguiente sección.
+Ya se puede probar los dos endpoint con cualquiera de las dos opciones, que se observará cómo en la siguiente sección.
 
 ---
 
@@ -143,7 +141,7 @@ Crear los dos ambientes de `dev` y `prod` en el repositorio de GitHub:
 
 Tener en cuenta que en `prod` se debe agregar la protection de "required reviewers" para que no se despliegue a prod sin aprobación.
 
-#### Crear los Actions secrets and variables
+#### 4. Crear los Actions secrets and variables
 
 Crear los siguientes actions secrets y variables por ambiente en el repositorio de GitHub:
 
@@ -151,10 +149,10 @@ Crear los siguientes actions secrets y variables por ambiente en el repositorio 
 
 ![Action Secrets](./img/10.png)
 
-En `SECRET_KEY` y `API_KEY` poner el valor que se encuentra en el archivo **.env** en el repositorio.
+En `SECRET_KEY` y `API_KEY` poner el valor que se encuentra en el archivo **.env.example** en el repositorio.
 En este caso, los dos valores previos y tambien el de `DUCKDNS_TOKEN` son los mismos para `dev` y `prod`.
 
-Nota: El valor de `DUCKDNS_TOKEN` l ogeneras en la página web logueandote con una cuenta y generando el token.
+Nota: El valor de `DUCKDNS_TOKEN` se lo genera en la página web logueandote con una cuenta y generando el token.
 
 **Variables:**
 
